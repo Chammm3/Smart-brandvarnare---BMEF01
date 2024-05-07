@@ -1,3 +1,4 @@
+
 /*
   If the IP address of your board is yourAddress:
     http://192.168.4.1/H turns the LED on
@@ -15,6 +16,7 @@
 #include <Adafruit_INA219.h>
 
 
+
 Adafruit_INA219 ina219;
 
 
@@ -30,37 +32,61 @@ int led =  LED_BUILTIN;
 int status = WL_IDLE_STATUS;
 WiFiServer server(80);
 void printWiFiStatus();
+void checkFire();
 
 int counter1=0;
 int counter2=0;
+int counter3=0;
+boolean isFire=false;
+
+float voltageArray[300];
+int i=0;
 
 //Battery
 ///////////////////////////////
-float shuntvoltage = 0;
-  float busvoltage = 0;
+ // float shuntvoltage = 0;
+  //float busvoltage = 0;
   float current_mA = 0; // needed
   float loadvoltage = 0;
-  float power_mW = 0;
+  //float power_mW = 0;
+  float minVoltage=3;
   float batteryvoltage = 0;
-  float batteryresistance = 2.85;
-  float batterymaxvoltage = 9.3;
-  float batteryprecent = 0;
-  String batteryPrecent="";
+  float batteryresistance = 13;
+  float batterymaxvoltage = 4.15;
+  float batterypercent = 0;
+  float highestVoltage=0;
+  String batteryPercent="";
+  float maxArrayVoltage=0;
+  int sumVolt=0;
 /////////////////////////////////
 
 
 void setup() {
+  Serial.begin(9600);
   
   //RTC
   ////////////////////////////
-  RTC.begin();
-  Serial.begin(9600);
+ /*
+ RTC.begin();
 
   RTCTime startTime(30, Month::APRIL, 2024, 12, 00, 00, DayOfWeek::MONDAY, SaveLight::SAVING_TIME_ACTIVE);
 
   RTC.setTime(startTime);
+
+*/
+  
+
+
+
   /////////////////////////////////////////
   
+  //Interrupt
+  int interruptPin=2;
+  pinMode(interruptPin, INPUT);
+  attachInterrupt(digitalPinToInterrupt(interruptPin), checkFire, RISING);
+
+  //////////////////////
+
 
 
 // ALARM
@@ -152,8 +178,9 @@ void setup() {
 
 
 void loop() {
+
   float temperature = particleSensor.readTemperature();
-  if(temperature > 28){ // if the temperature exceed 24c the speaker will make a constant sound. 
+  if(temperature > 28 || isFire){ // if the temperature exceed 24c the speaker will make a constant sound. 
       digitalWrite (buzzerPin, HIGH);
   } else {
       digitalWrite (buzzerPin, LOW);
@@ -189,7 +216,8 @@ void loop() {
   if (client) {                             // if you get a client,
     Serial.println("new client");           // print a message out the serial port
     String currentLine = "";                // make a String to hold incoming data from the client
-    while (client.connected()) {            // loop while the client's connected
+    while(client.connected()){  
+      counter3++;          // loop while the client's connected
       delayMicroseconds(10);                // This is required for the Arduino Nano RP2040 Connect - otherwise it will loop so fast that SPI will never be served.
       if (client.available()) {             // if there's bytes to read from the client,
         char c = client.read();             // read a byte, then
@@ -205,12 +233,90 @@ void loop() {
             client.println("Content-type:text/html");
             client.println();
 
-            // the content of the HTTP response follows the header:
-            client.print("<p style=\"font-size:7vw;\">Click <a href=\"/H\">here</a> turn the LED on<br></p>");
-            client.print("<p style=\"font-size:7vw;\">Click <a href=\"/L\">here</a> turn the LED off<br></p>");
 
-            client.print("<p style=\"font-size:7vw;\">Click <a href=\"/T\">here</a> TEST<br></p>");
-            client.print("<p style=\"font-size:7vw;\">Click <a href=\"/B\">here</a> CHECK BATTERY<br></p>");
+
+///// Page design
+          delay(500);
+client.println("<!DOCTYPE html>");
+            client.println("<html lang='en'>");
+            client.println("<head>");
+            //meta http-equiv="refresh" content="30">;
+            client.println("<meta charset='UTF-8'>");
+            client.println("<meta name='viewport' content='width=device-width, initial-scale=1.0'>");
+            client.println("<title>Brandvarnare Test</title>");
+            client.println("<style>");
+            client.println("body {");
+            client.println("    font-family: Arial, sans-serif;");
+            client.println("    margin: 0;");
+            client.println("    padding: 0;");
+            client.println("    background-color: #f4f4f4;");
+            client.println("}");
+
+            client.println(".container {");
+            client.println("    max-width: 600px;");
+            client.println("    margin: 50px auto;");
+            client.println("    padding: 20px;");
+            client.println("    background-color: #fff;");
+            client.println("    border-radius: 10px;");
+            client.println("    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);");
+            client.println("}");
+
+            client.println(".title-section {");
+            client.println("    text-align: center;");
+            client.println("    margin-bottom: 20px;");
+            client.println("}");
+
+            client.println(".title-section h1 {");
+            client.println("    font-size: 24px;");
+            client.println("    margin-bottom: 10px;");
+            client.println("}");
+
+            client.println(".title-section p {");
+            client.println("    font-size: 16px;");
+            client.println("    color: #666;");
+            client.println("}");
+
+            client.println(".status {");
+            client.println("    margin-bottom: 20px;");
+            client.println("}");
+
+            client.println("button {");
+            client.println("    display: block;");
+            client.println("    width: 100%;");
+            client.println("    padding: 10px 15px;");
+            client.println("    font-size: 16px;");
+            client.println("    color: #fff;");
+            client.println("    background-color: #007bff;");
+            client.println("    border: none;");
+            client.println("    border-radius: 5px;");
+            client.println("    cursor: pointer;");
+            client.println("    transition: background-color 0.3s ease;");
+            client.println("}");
+
+            client.println("button:hover {");
+            client.println("    background-color: #0056b3;");
+            client.println("}");
+            client.println("</style>");
+
+            client.println("</head>");
+            client.println("<body>");
+            client.println("<div class='container'>");
+            client.println("<div class='title-section'>");
+            client.println("<h1>Här kan den solcellsdrivna brandvarnaren testas!</h1>");
+            client.println("<p>Nedan visas även batteri-procenten på brandvarnaren.</p>");
+            client.println("</div>");
+            client.println("<div class='status'>");   
+            client.println("<p>Batteriprocent: <span id='battery-percent'></span></p>" + String(batterypercent) +"%"+ "<p></p>");
+            
+            client.println("</div>");
+            client.println("<button id='test-button' onclick=\"window.location.href='/T'\" style=\"color: white; background-color: #007bff; border: none; outline: none;\">Testa brandvarnare</button>");
+            client.println("</div>");
+            client.println("</body>");
+            client.println("</html>");
+            delay(500);
+            
+
+          /////////////////////
 
             // The HTTP response ends with another blank line:
             client.println();
@@ -226,45 +332,85 @@ void loop() {
         }
 
         // Check to see if the client request was "GET /H" or "GET /L":
-        if (currentLine.endsWith("GET /H")) {
-          digitalWrite(led, HIGH);               // GET /H turns the LED on
-        }
-        if (currentLine.endsWith("GET /L")) {
-          digitalWrite(led, LOW);                // GET /L turns the LED off
-        }
         if (currentLine.endsWith("GET /T")) {
           digitalWrite(buzzerPin, HIGH);
           delay(500);
           digitalWrite(buzzerPin, LOW);             // GET /T - test the buzzer
         }
+        
         if (currentLine.endsWith("GET /B")) {
-          batteryPrecent=String(batteryprecent);
-          
-          client.print("<p style=\"font-size:7vw;\">Battery:"+ batteryPrecent + "</p>");           // GET /B - display battery percent
+         // String.replace("xx%",batteryPercent+"%");
+          //client.print("<p style=\"font-size:7vw;\">Battery:"+ batteryPercent + "</p>");           // GET /B - display battery percent
         }
+        
       }
+      if(counter3>1000)
+    {
+      counter3=0;
+      counter2++;
+      //highestVoltage=0;
+    
+      break;
+
     }
+    }
+
     // close the connection:
     client.stop();
     Serial.println("client disconnected");
+    
   }
 
 
   // Battery
   //////////////////////////////////////
-  shuntvoltage = ina219.getShuntVoltage_mV();
-  busvoltage = ina219.getBusVoltage_V();
+ // shuntvoltage = ina219.getShuntVoltage_mV();
+  //busvoltage = ina219.getBusVoltage_V();
   current_mA = ina219.getCurrent_mA();   // needed
-  power_mW = ina219.getPower_mW();
-  loadvoltage = busvoltage + (shuntvoltage / 1000);   // needed
+  //power_mW = ina219.getPower_mW();
+  //loadvoltage = busvoltage + (shuntvoltage / 1000);
   batteryvoltage = (current_mA/1000)*batteryresistance;  // needed
-  batteryprecent = abs((batteryvoltage/batterymaxvoltage) * 100);  // needed
+  
+  /*
+  if(batteryvoltage<5)
+  {
+    voltageArray[i]=batteryvoltage;
+  }
+  */
+  
+  
+  i++;
+  if(i>300)
+  {
+    i=0;
+    sumVolt=0;
+     for(int j=1;j<sizeof(voltageArray);j++)
+  {
+    sumVolt+=voltageArray[j];
+  }
+   batteryvoltage=(sumVolt/sizeof(voltageArray));
+  }
+  
+  batterypercent = abs(((batteryvoltage-minVoltage)/(batterymaxvoltage-minVoltage)) * 100);  // needed
+  
+  /*
+  if(batteryvoltage>highestVoltage)
+  {
+    highestVoltage=batteryvoltage;
+  }
+ 
+  batterypercent = abs(((highestVoltage-minVoltage)/(batterymaxvoltage-minVoltage)) * 100);  // needed
+   */
+
+
+  batteryPercent=String(batterypercent);
+ // batteryPercent=String(counter2);
 
 
   //////////////////////////////////////
 
   counter1++;
-  counter2++;
+  //counter2++;
 }
 
 
@@ -281,6 +427,12 @@ void printWiFiStatus() {
   // print where to go in a browser:
   Serial.print("To see this page in action, open a browser to http://");
   Serial.println(ip);
+
+}
+
+void checkFire()
+{
+  isFire=true;
 
 }
 
